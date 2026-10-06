@@ -1,209 +1,210 @@
-﻿SELECT *
+/* =========================================================
+   ADTECH CAMPAIGN PERFORMANCE & CONVERSION ANALYTICS
+   MySQL 8.x
+   ========================================================= */
+
+
+/* 1. DATA EXPLORATION */
+
+SELECT *
 FROM adtech.kag_conversion_data;
+
 DESCRIBE adtech.kag_conversion_data;
-/*Data Cleaning
-1.Checking missing values
-2.Duplicates*/
 
- /*Checking Missing Values
-No missing values*/
-SELECT 
-ad_id
+
+/* 2. DATA QUALITY */
+
+/* Missing values */
+
+SELECT
+    SUM(ad_id IS NULL) AS missing_ad_id,
+    SUM(campaign_id IS NULL) AS missing_campaign_id,
+    SUM(age IS NULL) AS missing_age,
+    SUM(gender IS NULL) AS missing_gender,
+    SUM(interest IS NULL) AS missing_interest
+FROM adtech.kag_conversion_data;
+
+
+/* Duplicate Ad IDs */
+
+SELECT
+    ad_id,
+    COUNT(*) AS record_count
 FROM adtech.kag_conversion_data
-WHERE ad_id IS NULL;
+GROUP BY ad_id
+HAVING COUNT(*) > 1;
 
-/* 2. Checking Duplicates
-No Duplicates*/
-SELECT
-DISTINCT ad_id
-FROM adtech.kag_conversion_data;
-/* Explanatory Analysis */
--- KPIs
-/* 1. Click-Through-Rate(CTR)
-This is the ratio of clicks to impressions and measures the effectiveness of an ad in generating clicks
- 0.0179% */
-SELECT 
-SUM(CLicks)/ SUM(Impressions) *100 AS CTR
-FROM adtech.kag_conversion_data;
-/*Cost per Click(CPC)
-This is the amount spent on an ad per conversion and measures the efficiency of the ad spend in generating conversions
-The average spent per click 153.82*/
-SELECT 
-round(SUM(Spent)/SUM(Clicks)*100,2) AS CPC
-FROM adtech.kag_conversion_data;
-/*Conversion rate (CR)
-This is the ratio of conversions to clicks and measures the effectiveness of an ad in generating conversions*/
-SELECT
-SUM(Approved_Conversion)/SUM(Clicks)*100 AS CR
-FROM adtech.kag_conversion_data;
 
-SELECT 
-DISTINCT gender,
-COUNT(*) AS total_count
-FROM adtech.kag_conversion_data
-GROUP BY gender;
-SELECT
-age,
-COUNT(*) AS total_count
-FROM adtech.kag_conversion_data
-GROUP BY age
-ORDER BY COUNT(*) DESC;
-SELECT
-DISTINCT interest,
-COUNT(*) AS total_count
-FROM adtech.kag_conversion_data
-GROUP BY interest
-ORDER BY COUNT(*)  DESC;
-SELECT
-DISTINCT campaign_id
-FROM adtech.kag_conversion_data;
+/* 3. OVERALL KPIs */
+
+/* CTR */
 
 SELECT
-DISTINCT campaign_id,
-CASE 
-WHEN campaign_id =916 THEN 1
-WHEN campaign_id =936 THEN 2
-WHEN campaign_id=1178 THEN 3
-END AS campaign_segment
+    ROUND(
+        SUM(Clicks) / NULLIF(SUM(Impressions),0) * 100,
+        2
+    ) AS CTR
 FROM adtech.kag_conversion_data;
 
 
-UPDATE adtech.kag_conversion_data
-SET campaign_id= CASE 
-WHEN campaign_id =916 THEN 1
-WHEN campaign_id =936 THEN 2
-WHEN campaign_id=1178 THEN 3
-END;
+/* CPC */
+
 SELECT
-campaign_id
-FROM adtech.kag_conversion_data
-GROUP BY campaign_id;
--- campaign type and approved conversion 
+    ROUND(
+        SUM(Spent) / NULLIF(SUM(Clicks),0),
+        2
+    ) AS CPC
+FROM adtech.kag_conversion_data;
+
+
+/* Conversion Rate */
+
 SELECT
-campaign_id,
-SUM(Approved_Conversion) AS Total_Approved_Conversion
+    ROUND(
+        SUM(Approved_Conversion) /
+        NULLIF(SUM(Clicks),0) * 100,
+        2
+    ) AS conversion_rate
+FROM adtech.kag_conversion_data;
+
+
+/* CPA */
+
+SELECT
+    ROUND(
+        SUM(Spent) /
+        NULLIF(SUM(Approved_Conversion),0),
+        2
+    ) AS CPA
+FROM adtech.kag_conversion_data;
+
+
+/* 4. CAMPAIGN PERFORMANCE */
+
+SELECT
+    CASE
+        WHEN campaign_id = 916 THEN 1
+        WHEN campaign_id = 936 THEN 2
+        WHEN campaign_id = 1178 THEN 3
+    END AS campaign_level,
+
+    SUM(Impressions) AS impressions,
+    SUM(Clicks) AS clicks,
+    SUM(Total_Conversion) AS conversions,
+    SUM(Approved_Conversion) AS approved_conversions,
+    ROUND(SUM(Spent),2) AS spend,
+
+    ROUND(
+        SUM(Clicks) /
+        NULLIF(SUM(Impressions),0) * 100, 2
+    ) AS CTR,
+
+    ROUND(
+        SUM(Spent) /
+        NULLIF(SUM(Approved_Conversion),0), 2
+    ) AS CPA
+
 FROM adtech.kag_conversion_data
 GROUP BY campaign_id
-ORDER BY COUNT(*) DESC;
--- campaign type and Impressions and age
+ORDER BY approved_conversions DESC;
+
+
+/* 5. AGE × CAMPAIGN */
+
 SELECT
-age,
-campaign_id,
-SUM(Impressions) AS total_impressions,
-RANK() OVER(PARTITION BY age ORDER BY SUM(Impressions) DESC ) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY age,campaign_id
-ORDER BY SUM(Impressions) DESC;
+    age,
+    campaign_id,
 
--- campaign and clicks and age
-SELECT 
-age,
-campaign_id,
-SUM(Clicks) AS total_clicks,
-RANK() OVER(PARTITION BY age ORDER BY SUM(Clicks)DESC) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY age,campaign_id
-ORDER  BY SUM(Clicks) DESC;
-/* total conversion,age and campaign type
-enquired about the product*/
-SELECT 
-age,
-campaign_id,
-count(Total_Conversion) AS count_total_conversions,
-RANK() OVER(PARTITION BY age ORDER BY COUNT(Total_Conversion)DESC ) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY age,campaign_id 
-ORDER BY COUNT(Total_Conversion) DESC;
+    SUM(Impressions) AS impressions,
+    SUM(Clicks) AS clicks,
+    SUM(Approved_Conversion) AS approved_conversions,
+    ROUND(SUM(Spent),2) AS spend,
 
-/* approved conversion
-bought the products*/
-SELECT 
-age,
-campaign_id,
-SUM(Approved_Conversion) AS total_approved,
-round(SUM(Spent),2) AS total_amount_spent,
-RANK()OVER(PARTITION BY age ORDER BY SUM(Approved_Conversion) DESC) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY age,campaign_id
-ORDER BY total_approved DESC;
+    RANK() OVER (
+        PARTITION BY age
+        ORDER BY SUM(Approved_Conversion) DESC
+    ) AS campaign_rank
 
-/* Gender$campaign
-impression*/
-
-SELECT 
-gender,
-campaign_id,
-SUM(Impressions)AS total_impressions,
-round(SUM(Spent),2) AS total_amount_spent,
-RANK() OVER(PARTITION BY gender ORDER BY SUM(Impressions) DESC) AS ranking
 FROM adtech.kag_conversion_data
-GROUP BY gender,campaign_id
-ORDER BY total_impressions DESC;
--- clicks
+GROUP BY age, campaign_id
+ORDER BY age, campaign_rank;
 
-SELECT 
-gender,
-campaign_id,
-SUM(Clicks)AS total_clicks,
-round(SUM(Spent),2) AS total_amount_spent,
-RANK() OVER(PARTITION BY gender ORDER BY SUM(Clicks) DESC) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY gender,campaign_id
-ORDER BY total_clicks DESC;
-/* total conversions
-enquired to buy*/
-SELECT 
-gender,
-campaign_id,
-SUM(Total_Conversion)AS total_conversion,
-RANK() OVER(PARTITION BY gender ORDER BY SUM(Total_Conversion) DESC) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY gender,campaign_id
-ORDER BY total_conversion DESC;
 
-/*approved conversion
-bought the product*/
+/* 6. GENDER × CAMPAIGN */
 
-SELECT 
-gender,
-campaign_id,
-SUM(Approved_Conversion)AS total_approved,
-round(SUM(Spent),2) AS total_amount_spent,
-RANK() OVER(PARTITION BY gender ORDER BY SUM(Approved_Conversion) DESC) AS ranking
-FROM adtech.kag_conversion_data
-GROUP BY gender,campaign_id
-ORDER BY total_approved DESC;
- /*interestcode specifying the category to which
- the personâ€™s interest belongs (interests are as mentioned in the personâ€™s Facebook public profile).
- range from 2-114*/
 SELECT
-interest
+    gender,
+    campaign_id,
+
+    SUM(Impressions) AS impressions,
+    SUM(Clicks) AS clicks,
+    SUM(Total_Conversion) AS conversions,
+    SUM(Approved_Conversion) AS approved_conversions,
+    ROUND(SUM(Spent),2) AS spend,
+
+    RANK() OVER (
+        PARTITION BY gender
+        ORDER BY SUM(Approved_Conversion) DESC
+    ) AS campaign_rank
+
 FROM adtech.kag_conversion_data
-GROUP BY interest;
-/* create bins with a width of 25*/
-SELECT 
-CONCAT(FLOOR(interest/25)*25+1, '-', FLOOR(interest/25)*25+25) AS interest_bin, 
-COUNT(*) AS num_interest
-FROM 
-adtech.kag_conversion_data
-GROUP BY 
-FLOOR(interest/25)
-ORDER BY 
-num_interest DESC;
+GROUP BY gender, campaign_id
+ORDER BY gender, campaign_rank;
 
--- Distibution of interest per campaign
-SELECT 
-campaign_id,
-CONCAT(FLOOR(interest/25)*25+1, '-', FLOOR(interest/25)*25+25) AS interest_bin, 
-COUNT(*) AS num_interest,
-round(SUM(Spent),2) AS total_amount_spent,
-SUM(Approved_Conversion) AS total_approved_conversion,
-ROW_NUMBER() OVER(PARTITION BY CONCAT(FLOOR(interest/25)*25+1, '-', FLOOR(interest/25)*25+25) ORDER BY COUNT(*) DESC )AS ranking
-FROM 
-adtech.kag_conversion_data
--- WHERE campaign_id=1
-GROUP BY 
-FLOOR(interest/25),campaign_id
-ORDER BY 
-num_interest DESC;
 
+/* 7. INTEREST SEGMENTATION */
+
+SELECT
+    CONCAT(
+        FLOOR(interest / 25) * 25 + 1,
+        '-',
+        FLOOR(interest / 25) * 25 + 25
+    ) AS interest_bin,
+
+    COUNT(*) AS records,
+    SUM(Approved_Conversion) AS approved_conversions,
+    ROUND(SUM(Spent),2) AS spend,
+
+    ROUND(
+        SUM(Spent) /
+        NULLIF(SUM(Approved_Conversion),0),
+        2
+    ) AS CPA
+
+FROM adtech.kag_conversion_data
+GROUP BY FLOOR(interest / 25)
+ORDER BY approved_conversions DESC;
+
+
+/* 8. ADVANCED ANALYSIS
+   Identify campaigns with high impressions
+   but relatively low CTR.
+*/
+
+WITH campaign_metrics AS (
+
+    SELECT
+        campaign_id,
+        SUM(Impressions) AS impressions,
+        SUM(Clicks) AS clicks,
+        SUM(Approved_Conversion) AS approved_conversions,
+
+        ROUND(
+            SUM(Clicks) /
+            NULLIF(SUM(Impressions),0) * 100,
+            2
+        ) AS CTR
+
+    FROM adtech.kag_conversion_data
+    GROUP BY campaign_id
+)
+
+SELECT
+    campaign_id,
+    impressions,
+    clicks,
+    approved_conversions,
+    CTR
+
+FROM campaign_metrics
+ORDER BY impressions DESC;
